@@ -433,7 +433,7 @@ def render_result(response: dict) -> None:
     risk = response.get("risk_level", "N/A")
     shap_values: list[dict] = response.get("top_features", [])
 
-    is_malignant = label == "MALIGNANT"
+    is_malignant = label.lower() == "malignant"
     card_class = "card-malignant" if is_malignant else "card-benign"
     emoji = "🔴" if is_malignant else "🟢"
     label_pt = "Maligno" if is_malignant else "Benigno"
@@ -441,12 +441,15 @@ def render_result(response: dict) -> None:
 
     # ── Badge de risco ────────────────────────────────────────────────────────
     risk_map = {
-        "Alto": ("badge-high", "Alto"),
-        "Moderado": ("badge-medium", "Moderado"),
-        "Baixo": ("badge-low", "Baixo"),
-        "High": ("badge-high", "Alto"),
+        "high":     ("badge-high",   "Alto"),
+        "medium":   ("badge-medium", "Moderado"),
+        "low":      ("badge-low",    "Baixo"),
+        "High":     ("badge-high",   "Alto"),
         "Moderate": ("badge-medium", "Moderado"),
-        "Low": ("badge-low", "Baixo"),
+        "Low":      ("badge-low",    "Baixo"),
+        "Alto":     ("badge-high",   "Alto"),
+        "Moderado": ("badge-medium", "Moderado"),
+        "Baixo":    ("badge-low",    "Baixo"),
     }
     badge_class, risk_pt = risk_map.get(risk, ("badge-low", risk))
 
