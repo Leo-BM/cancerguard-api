@@ -164,9 +164,9 @@ Mlops_Cancer_Breast/
 |---|---|---|
 | 1 | Ambiente, estrutura e Git | ✅ Completo |
 | 2 | Treinamento + MLflow tracking | ✅ Completo |
-| 3 | MLflow Model Registry | ⏳ Em andamento |
-| 4 | FastAPI core | ⬜ Pendente |
-| 5 | Logging SQLite | ⬜ Pendente |
+| 3 | MLflow Model Registry | ✅ Completo |
+| 4 | FastAPI core | ✅ Completo |
+| 5 | Logging SQLite | ✅ Completo |
 | 6 | Testes automatizados | ⬜ Pendente |
 | 7 | Interface Streamlit | ⬜ Pendente |
 | 8 | Docker + Compose | ⬜ Pendente |
