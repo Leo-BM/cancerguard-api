@@ -329,18 +329,18 @@ def render_form() -> dict:
 
     # ── Valores padrão: caso benigno típico do dataset Wisconsin ──────────────
     defaults = {
-        # mean
-        "radius_mean": 12.0,
-        "texture_mean": 17.0,
-        "perimeter_mean": 78.0,
-        "area_mean": 440.0,
-        "smoothness_mean": 0.095,
-        "compactness_mean": 0.080,
-        "concavity_mean": 0.050,
-        "concave_points_mean": 0.030,
-        "symmetry_mean": 0.180,
-        "fractal_dimension_mean": 0.060,
-        # se
+        # mean  →  prefixo: mean_X  (ordem que a API espera)
+        "mean_radius": 12.0,
+        "mean_texture": 17.0,
+        "mean_perimeter": 78.0,
+        "mean_area": 440.0,
+        "mean_smoothness": 0.095,
+        "mean_compactness": 0.080,
+        "mean_concavity": 0.050,
+        "mean_concave_points": 0.030,
+        "mean_symmetry": 0.180,
+        "mean_fractal_dimension": 0.060,
+        # se  →  sufixo: X_se  (igual ao schemas.py)
         "radius_se": 0.30,
         "texture_se": 1.20,
         "perimeter_se": 2.00,
@@ -351,17 +351,17 @@ def render_form() -> dict:
         "concave_points_se": 0.008,
         "symmetry_se": 0.020,
         "fractal_dimension_se": 0.003,
-        # worst
-        "radius_worst": 14.0,
-        "texture_worst": 24.0,
-        "perimeter_worst": 92.0,
-        "area_worst": 600.0,
-        "smoothness_worst": 0.130,
-        "compactness_worst": 0.200,
-        "concavity_worst": 0.200,
-        "concave_points_worst": 0.100,
-        "symmetry_worst": 0.280,
-        "fractal_dimension_worst": 0.080,
+        # worst  →  prefixo: worst_X  (ordem que a API espera)
+        "worst_radius": 14.0,
+        "worst_texture": 24.0,
+        "worst_perimeter": 92.0,
+        "worst_area": 600.0,
+        "worst_smoothness": 0.130,
+        "worst_compactness": 0.200,
+        "worst_concavity": 0.200,
+        "worst_concave_points": 0.100,
+        "worst_symmetry": 0.280,
+        "worst_fractal_dimension": 0.080,
     }
 
     # ── Labels e tooltips em português ────────────────────────────────────────
@@ -391,17 +391,24 @@ def render_form() -> dict:
     }
 
     features = list(labels.keys())
-    suffixes = ["mean", "se", "worst"]
-    tab_labels = ["📊 Médias (mean)", "📉 Erros Padrão (SE)", "⚠️ Piores Valores (worst)"]
+    # Cada sufixo define tanto o prefixo/sufixo do campo quanto a aba
+    # mean  → API espera  mean_X
+    # se    → API espera  X_se
+    # worst → API espera  worst_X
+    suffix_info = [
+        ("mean",  "mean_{feat}",  "📊 Médias (mean)"),
+        ("se",    "{feat}_se",    "📉 Erros Padrão (SE)"),
+        ("worst", "worst_{feat}", "⚠️ Piores Valores (worst)"),
+    ]
 
     payload: dict = {}
 
-    tabs = st.tabs(tab_labels)
-    for tab, suffix in zip(tabs, suffixes):
+    tabs = st.tabs([s[2] for s in suffix_info])
+    for tab, (suffix, key_tpl, _) in zip(tabs, suffix_info):
         with tab:
             col1, col2 = st.columns(2, gap="medium")
             for i, feat in enumerate(features):
-                key = f"{feat}_{suffix}"
+                key = key_tpl.format(feat=feat)
                 label = f"{labels[feat]}"
                 tip = tooltips[feat]
                 col = col1 if i % 2 == 0 else col2
@@ -422,9 +429,9 @@ def render_form() -> dict:
 # ─── Exibir resultado ─────────────────────────────────────────────────────────
 def render_result(response: dict) -> None:
     label = response.get("prediction", "UNKNOWN")
-    prob = response.get("probability", 0.0)
+    prob = response.get("probability_malignant", 0.0)
     risk = response.get("risk_level", "N/A")
-    shap_values: list[dict] = response.get("shap_values", [])
+    shap_values: list[dict] = response.get("top_features", [])
 
     is_malignant = label == "MALIGNANT"
     card_class = "card-malignant" if is_malignant else "card-benign"
@@ -469,13 +476,13 @@ def render_result(response: dict) -> None:
         )
 
         # Ordenar pelo valor absoluto — top 10
-        sorted_shap = sorted(shap_values, key=lambda x: abs(x["value"]), reverse=True)[:10]
-        max_abs = max(abs(x["value"]) for x in sorted_shap) or 1.0
+        sorted_shap = sorted(shap_values, key=lambda x: abs(x["shap_value"]), reverse=True)[:10]
+        max_abs = max(abs(x["shap_value"]) for x in sorted_shap) or 1.0
 
         bars_html = '<div class="shap-bar">'
         for item in sorted_shap:
             feat = item["feature"].replace("_", " ")
-            val = item["value"]
+            val = item["shap_value"]
             bar_len = int(abs(val) / max_abs * 25)
             bar_char = "█" * bar_len
             sign = "+" if val >= 0 else "−"
