@@ -121,11 +121,23 @@ source .venv/bin/activate
 # 3. Instalar dependências
 pip install -r requirements.txt
 
-# 4. Subir o MLflow (em um terminal separado)
-mlflow ui --port 5000
+# 4. Subir o MLflow
+# Atenção: no macOS, a porta 5000 é ocupada pelo AirPlay Receiver.
+# Use a porta 5001:
+mlflow ui --port 5001
+# Acesse: http://localhost:5001
 
-# 5. Treinar o modelo
+# 5. Treinar o modelo (em outro terminal com .venv ativo)
 python training/train.py
+python training/register_model.py
+
+# 6. Subir a API (passe a URI correta do MLflow)
+MLFLOW_TRACKING_URI=http://localhost:5001 uvicorn app.main:app --reload --port 8000
+# Acesse os docs: http://localhost:8000/docs
+
+# 7. Subir a interface Streamlit (em outro terminal com .venv ativo)
+streamlit run streamlit_app/app.py --server.port 8501
+# Acesse: http://localhost:8501
 
 
 
@@ -167,8 +179,8 @@ Mlops_Cancer_Breast/
 | 3 | MLflow Model Registry | ✅ Completo |
 | 4 | FastAPI core | ✅ Completo |
 | 5 | Logging SQLite | ✅ Completo |
-| 6 | Testes automatizados | ⬜ Pendente |
-| 7 | Interface Streamlit | ⬜ Pendente |
+| 6 | Testes automatizados | ✅ Completo — 36 testes, 80% cobertura |
+| 7 | Interface Streamlit | ✅ Completo |
 | 8 | Docker + Compose | ⬜ Pendente |
 | 9 | GitHub Actions CI/CD | ⬜ Pendente |
 | 10 | Deploy no Render | ⬜ Pendente |
