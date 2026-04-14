@@ -2,8 +2,11 @@
 .venv/
 predictions.db
 mlruns/
-*.joblib
+# model.joblib e scaler.joblib são commitados (necessários para o deploy no Render).
+# Apenas o scaler.joblib temporário criado na raiz pelo train.py antes do log_artifact
+# seria duplicado, mas como o export_model.py o substitui com o artefato correto, ambos
+# devem estar versionados. Removida a regra *.joblib para permitir o commit.
 __pycache__/
 .pytest_cache/
 *.pyc
-docs/
+# docs/

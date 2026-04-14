@@ -37,37 +37,53 @@ def load_model() -> None:
     Carrega o modelo SVM, o scaler e inicializa o explainer SHAP.
     Chamado uma única vez no startup da FastAPI (lifespan).
 
-    Por que separar modelo e scaler?
-    O scaler.joblib foi salvo como artefato do *run* de treinamento via
-    mlflow.log_artifact(), não embutido dentro do modelo registrado no
-    Registry. Por isso, mlflow.artifacts.load_artifacts("models:/...") não
-    o encontraria. A solução é:
-      1. Descobrir o run_id da versão em Production via MlflowClient
-      2. Baixar o artefato diretamente daquele run com download_artifacts()
+    Estratégia de carregamento (detectada automaticamente via env var):
+    ┌─────────────────────────────┬───────────────────────────────────────────┐
+    │ MLFLOW_TRACKING_URI definida│ Carrega do MLflow Registry (local/Docker) │
+    │ Não definida                │ Carrega de model.joblib + scaler.joblib   │
+    │                             │ (produção no Render — sem servidor MLflow) │
+    └─────────────────────────────┴───────────────────────────────────────────┘
+
+    Os arquivos .joblib são gerados por training/export_model.py e commitados
+    no repositório, sendo copiados para a imagem Docker pelo Dockerfile.
     """
     global _model, _scaler, _explainer
 
-    tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
-    mlflow.set_tracking_uri(tracking_uri)
+    tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
 
-    # 1. Carrega o modelo SVM do Registry (stage Production)
-    _model = mlflow.sklearn.load_model("models:/cancerguard-svm/Production")
+    if tracking_uri:
+        # ── Caminho 1: MLflow (desenvolvimento local ou Docker Compose) ───────
+        # Conecta ao servidor MLflow e carrega o modelo em stage Production.
+        import mlflow.sklearn
+        from mlflow import MlflowClient
 
-    # 2. Recupera o run_id da versão atualmente em Production
-    #    get_latest_versions() retorna uma lista; pegamos o primeiro (e único)
-    client = MlflowClient()
-    versions = client.get_latest_versions("cancerguard-svm", stages=["Production"])
-    run_id = versions[0].run_id
+        mlflow.set_tracking_uri(tracking_uri)
 
-    # 3. Baixa o scaler.joblib do run original e desserializa com joblib
-    #    download_artifacts() retorna o caminho local do arquivo baixado
-    local_scaler_path = client.download_artifacts(run_id, "scaler.joblib")
-    _scaler = joblib.load(local_scaler_path)
+        _model = mlflow.sklearn.load_model("models:/cancerguard-svm/Production")
 
-    # 4. Inicializa o KernelExplainer do SHAP
-    #    - background: tensor de zeros usado como referência (baseline)
-    #    - KernelExplainer funciona com qualquer modelo que tenha predict_proba
-    #    - É mais lento que TreeExplainer, mas agnóstico ao tipo de modelo
+        # O scaler foi salvo como artefato do run — não está embutido no modelo.
+        # É necessário recuperar o run_id da versão em Production e baixar o artefato.
+        client = MlflowClient()
+        versions = client.get_latest_versions("cancerguard-svm", stages=["Production"])
+        run_id = versions[0].run_id
+        local_scaler_path = client.download_artifacts(run_id, "scaler.joblib")
+        _scaler = joblib.load(local_scaler_path)
+
+    else:
+        # ── Caminho 2: arquivos .joblib (produção — Render sem servidor MLflow) ──
+        # Os arquivos são gerados por training/export_model.py e ficam na raiz
+        # do projeto. No container Docker, o WORKDIR é /app — os arquivos ficam
+        # em /app/model.joblib e /app/scaler.joblib.
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        model_path  = os.path.join(base_dir, "model.joblib")
+        scaler_path = os.path.join(base_dir, "scaler.joblib")
+
+        _model  = joblib.load(model_path)
+        _scaler = joblib.load(scaler_path)
+
+    # ── SHAP (comum aos dois caminhos) ────────────────────────────────────────
+    # KernelExplainer funciona com qualquer modelo que tenha predict_proba.
+    # Background de zeros é o baseline de referência para os valores SHAP.
     background = np.zeros((1, len(FEATURE_NAMES)))
     _explainer = shap.KernelExplainer(_model.predict_proba, background)
 

@@ -22,6 +22,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app/ ./app/
 COPY training/ ./training/
 
+# Layer 4 — artefatos do modelo para deploy sem MLflow (ex: Render)
+# Gerados por training/export_model.py e commitados no repositório.
+# Quando MLFLOW_TRACKING_URI não está definida, app/model.py carrega daqui.
+# Pré-requisito: executar export_model.py antes de qualquer docker build.
+COPY model.joblib scaler.joblib ./
+
 EXPOSE 8000
 
 # --host 0.0.0.0 é obrigatório em containers:
