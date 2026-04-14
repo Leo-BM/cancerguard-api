@@ -3,7 +3,7 @@ uvicorn==0.30.0
 pydantic==2.8.0
 scikit-learn==1.6.1
 mlflow==2.19.0
-shap==0.46.0
+shap==0.47.0
 numpy
 streamlit==1.41.0
 pytest==8.3.0
