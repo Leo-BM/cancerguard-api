@@ -138,10 +138,34 @@ MLFLOW_TRACKING_URI=http://localhost:5001 uvicorn app.main:app --reload --port 8
 # 7. Subir a interface Streamlit (em outro terminal com .venv ativo)
 streamlit run streamlit_app/app.py --server.port 8501
 # Acesse: http://localhost:8501
+```
 
+## Como Rodar com Docker
 
+**Pré-requisito:** Docker Desktop instalado e em execução.
 
----
+```bash
+# 1. Clonar e entrar no projeto
+git clone https://github.com/Leo-BM/Mlops_Cancer_Breast.git
+cd Mlops_Cancer_Breast
+
+# 2. Garantir que o arquivo de log existe (necessário para o bind mount)
+touch predictions.db
+
+# 3. Build das imagens (primeira vez ~5 min — compila extensão C++ do SHAP)
+docker compose build
+
+# 4. Subir os 3 serviços
+docker compose up
+# MLflow:    http://localhost:5001
+# API:       http://localhost:8000
+# Streamlit: http://localhost:8501
+
+# 5. Parar tudo
+docker compose down
+```
+
+> **Atenção macOS:** o MLflow roda na porta `5001` do host (o AirPlay Receiver ocupa a `5000`). Dentro da rede Docker, os containers se comunicam via `mlflow:5000`.
 
 ## Estrutura do Projeto
 
@@ -163,6 +187,7 @@ Mlops_Cancer_Breast/
 ├── .github/workflows/
 │   └── ci.yml               ← pipeline CI/CD
 ├── Dockerfile
+├── Dockerfile.streamlit
 ├── docker-compose.yml
 ├── requirements.txt
 └── .env.example
@@ -181,7 +206,7 @@ Mlops_Cancer_Breast/
 | 5 | Logging SQLite | ✅ Completo |
 | 6 | Testes automatizados | ✅ Completo — 36 testes, 80% cobertura |
 | 7 | Interface Streamlit | ✅ Completo |
-| 8 | Docker + Compose | ⬜ Pendente |
+| 8 | Docker + Compose | ✅ Completo |
 | 9 | GitHub Actions CI/CD | ⬜ Pendente |
 | 10 | Deploy no Render | ⬜ Pendente |
 
