@@ -185,7 +185,7 @@ Mlops_Cancer_Breast/
 │   ├── test_predict.py      ← testes unitários do modelo
 │   └── test_api.py          ← testes de integração da API
 ├── .github/workflows/
-│   └── ci.yml               ← pipeline CI/CD
+│   └── ci.yml               ← pipeline CI/CD (test + deploy)
 ├── Dockerfile
 ├── Dockerfile.streamlit
 ├── docker-compose.yml
@@ -207,7 +207,7 @@ Mlops_Cancer_Breast/
 | 6 | Testes automatizados | ✅ Completo — 36 testes, 80% cobertura |
 | 7 | Interface Streamlit | ✅ Completo |
 | 8 | Docker + Compose | ✅ Completo |
-| 9 | GitHub Actions CI/CD | ⬜ Pendente |
+| 9 | GitHub Actions CI/CD | ✅ Completo |
 | 10 | Deploy no Render | ⬜ Pendente |
 
 ---
