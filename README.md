@@ -20,6 +20,7 @@ O CancerGuard API recebe medidas de núcleos celulares extraídas de imagens de 
 
 ## Arquitetura
 
+**Desenvolvimento local / Docker Compose:**
 ```
 [Streamlit UI] ──HTTP──► [FastAPI] ──► [model.py] ──► [MLflow Registry]
     porta 8501               porta 8000      │               │
@@ -30,6 +31,16 @@ O CancerGuard API recebe medidas de núcleos celulares extraídas de imagens de 
                                         ▼                          ▼
                                  [SHAP Explainer]         [Logger / SQLite]
                                   (explicabilidade)         (auditoria)
+```
+
+**Produção (cloud):**
+```
+[Streamlit Cloud] ──HTTPS──► [Render (FastAPI)] ──► [model.joblib + scaler.joblib]
+  (interface pública)          (API pública)          (artefatos no repositório)
+                                     │
+                                ┌────┴─────────────────────┐
+                                ▼                          ▼
+                         [SHAP Explainer]         [Logger / SQLite]
 ```
 
 - **FastAPI** — camada de API com validação automática via Pydantic
@@ -209,7 +220,7 @@ Mlops_Cancer_Breast/
 | 7 | Interface Streamlit | ✅ Completo |
 | 8 | Docker + Compose | ✅ Completo |
 | 9 | GitHub Actions CI/CD | ✅ Completo |
-| 10 | Deploy no Render | ⬜ Pendente |
+| 10 | Deploy no Render | ✅ Completo |
 
 ---
 
@@ -223,6 +234,24 @@ PORT=8000
 API_BASE_URL=http://localhost:8000
 LOG_DB_PATH=predictions.db
 ```
+
+---
+
+## Deploy em Produção
+
+A aplicação está deployada em dois serviços gratuitos:
+
+| Serviço | Plataforma | Descrição |
+|---|---|---|
+| API (FastAPI) | Render | Runtime Docker, deploy automático via GitHub Actions |
+| Interface (Streamlit) | Streamlit Community Cloud | Conectada à API no Render |
+
+**Estratégia de artefatos sem MLflow:**
+O Render não tem acesso ao servidor MLflow local. O modelo e o scaler são exportados como arquivos `.joblib` via `training/export_model.py`, commitados no repositório e copiados para a imagem Docker. A detecção do ambiente é automática:
+- `MLFLOW_TRACKING_URI` definida → carrega do MLflow (desenvolvimento/Docker Compose)
+- `MLFLOW_TRACKING_URI` ausente → carrega dos `.joblib` (Render)
+
+> **Cold start:** o free tier do Render hiberna após ~15 min de inatividade. A primeira requisição após hibernação demora ~30s. Comportamento esperado para portfólio.
 
 ---
 
