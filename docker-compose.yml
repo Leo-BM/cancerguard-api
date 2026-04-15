@@ -1,37 +1,23 @@
-# ─── Fase 8: CancerGuard — Orquestração de Containers ───────────────────────
-#
-# Três serviços em ordem de dependência:
-#   mlflow → api → streamlit
-#
-# Rede interna (bridge padrão do Compose):
-#   - Os serviços se enxergam pelo nome: api conecta em "mlflow:5000"
-#   - "mlflow:5000" é diferente de "localhost:5001" (porta do host)
-#   - O host acessa tudo pelas portas mapeadas (5001, 8000, 8501)
-#
 services:
 
-  # ── 1. MLflow Tracking Server ───────────────────────────────────────────────
   mlflow:
     image: ghcr.io/mlflow/mlflow:latest
     ports:
-      - "5001:5000"       # host:5001 → container:5000
-                          # (macOS AirPlay Receiver bloqueia porta 5000 no host)
+      - "5001:5000"   # macOS: AirPlay bloqueia porta 5000 no host
     command: >
       mlflow server
       --host 0.0.0.0
       --backend-store-uri file:///mlflow/mlruns
       --default-artifact-root file:///mlflow/mlruns
     volumes:
-      - ./mlruns:/mlflow/mlruns   # bind mount: usa o modelo já treinado localmente
+      - ./mlruns:/mlflow/mlruns
     healthcheck:
-      # Aguarda o server MLflow estar pronto antes de liberar api
       test: ["CMD-SHELL", "wget -qO- http://localhost:5000/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 8
       start_period: 15s
 
-  # ── 2. FastAPI (CancerGuard API) ────────────────────────────────────────────
   api:
     build:
       context: .
@@ -39,16 +25,13 @@ services:
     ports:
       - "8000:8000"
     environment:
-      # Dentro da rede Docker, "mlflow" resolve para o IP do container mlflow
-      # (não use localhost aqui — localhost seria o próprio container da api)
       - MLFLOW_TRACKING_URI=http://mlflow:5000
     depends_on:
       mlflow:
-        condition: service_healthy   # aguarda o healthcheck do mlflow passar
+        condition: service_healthy
     volumes:
-      - ./predictions.db:/app/predictions.db   # persiste o log de predições no host
+      - ./predictions.db:/app/predictions.db
 
-  # ── 3. Streamlit UI ─────────────────────────────────────────────────────────
   streamlit:
     build:
       context: .
@@ -56,7 +39,6 @@ services:
     ports:
       - "8501:8501"
     environment:
-      # Dentro da rede Docker, "api" resolve para o IP do container da FastAPI
       - API_BASE_URL=http://api:8000
     depends_on:
       - api

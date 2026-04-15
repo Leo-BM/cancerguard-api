@@ -1,29 +1,17 @@
-# ─── Fase 8: CancerGuard — Imagem do Streamlit ───────────────────────────────
-#
-# Dockerfile separado do da API por dois motivos:
-#   1. Esta imagem não precisa de app/ nem training/ (imagem menor)
-#   2. Permite escalar ou atualizar API e UI de forma independente
-#
 FROM python:3.13-slim
 
 WORKDIR /app
 
-# shap==0.46.0 precisa compilar extensão C++ (_cext.cc) no Linux.
-# Instalamos g++ antes do pip, e removemos após para não inflar a imagem.
 RUN apt-get update && apt-get install -y --no-install-recommends g++ \
     && rm -rf /var/lib/apt/lists/*
 
-# Layer — dependências (mesmo requirements.txt — mesma base de libs)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Layer 3 — apenas o código da interface visual
 COPY streamlit_app/ ./streamlit_app/
 
 EXPOSE 8501
 
-# --server.address 0.0.0.0 é obrigatório em containers (mesma razão do uvicorn)
-# --server.headless true desabilita a tentativa de abrir o browser automaticamente
 CMD ["streamlit", "run", "streamlit_app/app.py", \
      "--server.port", "8501", \
      "--server.address", "0.0.0.0", \

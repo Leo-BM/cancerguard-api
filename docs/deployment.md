@@ -23,6 +23,11 @@ FROM python:3.13-slim
 
 WORKDIR /app
 
+# shap==0.47.0 pode precisar compilar extensão C++ (_cext.cc) no Linux se não houver wheel.
+# g++ é instalado antes do pip e o cache do apt removido para não inflar a imagem final.
+RUN apt-get update && apt-get install -y --no-install-recommends g++ \
+    && rm -rf /var/lib/apt/lists/*
+
 # Layer pesada — só rebuilda se requirements.txt mudar
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
@@ -40,10 +45,11 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 ```
 Layer 1: python:3.13-slim           ← base, nunca muda
-Layer 2: COPY requirements.txt      ← invalida só se as deps mudarem
-Layer 3: RUN pip install            ← cache pesado (~2 min)
-Layer 4: COPY app/ training/        ← invalidado a cada push de código
-Layer 5: CMD uvicorn                ← ponto de entrada
+Layer 2: apt-get install g++        ← compilador C++ para SHAP
+Layer 3: COPY requirements.txt      ← invalida só se as deps mudarem
+Layer 4: RUN pip install            ← cache pesado (~5 min na 1ª vez, compila SHAP)
+Layer 5: COPY app/ training/        ← invalidado a cada push de código
+Layer 6: CMD uvicorn                ← ponto de entrada
 ```
 
 ---
@@ -56,9 +62,19 @@ services:
     image: ghcr.io/mlflow/mlflow:latest
     ports:
       - "5001:5000"  # host:container (5000 bloqueada pelo macOS AirPlay)
-    command: mlflow server --host 0.0.0.0
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --backend-store-uri file:///mlflow/mlruns
+      --default-artifact-root file:///mlflow/mlruns
     volumes:
-      - mlflow_data:/mlflow
+      - ./mlruns:/mlflow/mlruns   # bind mount — usa modelo já treinado localmente
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+      start_period: 15s
 
   api:
     build: .
@@ -67,7 +83,10 @@ services:
     environment:
       - MLFLOW_TRACKING_URI=http://mlflow:5000  # rede interna Docker usa 5000
     depends_on:
-      - mlflow
+      mlflow:
+        condition: service_healthy   # aguarda healthcheck do mlflow passar
+    volumes:
+      - ./predictions.db:/app/predictions.db   # persiste log de predições no host
 
   streamlit:
     build:
@@ -79,16 +98,13 @@ services:
       - API_BASE_URL=http://api:8000
     depends_on:
       - api
-
-volumes:
-  mlflow_data:
 ```
 
 ```
 docker compose up
          │
          ├── mlflow (porta host 5001)  ← sobe primeiro
-         │       └── volume: mlflow_data (persistência dos runs)
+         │       └── bind mount: ./mlruns (modelo já treinado localmente)
          │
          ├── api (porta 8000)     ← sobe após mlflow
          │       └── conecta em http://mlflow:5000 (rede interna)
@@ -155,8 +171,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
       - run: pip install -r requirements.txt
@@ -166,9 +182,16 @@ jobs:
     needs: test                                  # só roda se test passou
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'          # só na main
+    env:
+      DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
     steps:
-      - name: Deploy to Render
-        run: curl -X POST ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+      - name: Deploy no Render
+        run: |
+          if [ -z "$DEPLOY_HOOK" ]; then
+            echo "RENDER_DEPLOY_HOOK não configurado — deploy ignorado (configure na Fase 10)"
+            exit 0
+          fi
+          curl -X POST "$DEPLOY_HOOK"
 ```
 
 ### Regras do Pipeline
@@ -176,7 +199,7 @@ jobs:
 - `test` roda em todo push e PR
 - `deploy` roda **somente** quando `test` passou **e** o push foi na `main`
 - Pull Requests não disparam deploy
-- `RENDER_DEPLOY_HOOK_URL` é um secret no GitHub Actions — nunca exposto em código
+- `RENDER_DEPLOY_HOOK` é um secret no GitHub Actions — nunca exposto em código
 
 ### Fluxo visual
 
@@ -187,7 +210,7 @@ push na main
 GitHub Actions
      │
      ├── Job: test
-     │    ├── setup Python 3.11
+     │    ├── setup Python 3.13
      │    ├── pip install
      │    └── pytest ──► PASS
      │                     │
@@ -203,12 +226,38 @@ GitHub Actions
 
 ## 6. Deploy no Render.com
 
+### Por que Render e não AWS/Azure/GCP?
+O Render oferece free tier real (sem cartão de crédito, sem risco de cobrança acidental), integração nativa com GitHub e deploy via Docker com 4 cliques. Para um portfólio de Data Science/MLOps, o objetivo é demonstrar a API funcionando na nuvem — não configurar infra cloud enterprise.
+
+### Solução para o MLflow em produção
+
+O Render não tem acesso ao MLflow local. O modelo é exportado como arquivo `.joblib` e commitado no repositório:
+
+```bash
+# 1. Exportar (com MLflow local rodando)
+MLFLOW_TRACKING_URI=http://localhost:5001 python training/export_model.py
+
+# 2. Commitar os artefatos (deve ser feito antes de qualquer docker build)
+git add model.joblib scaler.joblib
+git commit -m "feat(phase-10): artefatos do modelo para deploy"
+git push origin main
+```
+
+O `app/model.py` detecta automaticamente o ambiente:
+- `MLFLOW_TRACKING_URI` definida → carrega do MLflow (local/Docker)
+- `MLFLOW_TRACKING_URI` ausente → carrega dos arquivos `.joblib` (Render)
+
+### Passos no painel do Render
+
 1. Criar conta em [render.com](https://render.com)
 2. **New → Web Service → Connect GitHub repo**
-3. Selecionar **Docker** como runtime
-4. Configurar variáveis de ambiente no painel
-5. Adicionar o Deploy Hook URL como secret no GitHub Actions (`RENDER_DEPLOY_HOOK_URL`)
+3. Runtime: **Docker**, Branch: `main`, Port: `8000`
+4. Variável de ambiente: `LOG_DB_PATH=predictions.db`
+   - **Não** configurar `MLFLOW_TRACKING_URI` (ausência ativa o carregamento via `.joblib`)
+5. Copiar o **Deploy Hook URL** → GitHub → Settings → Secrets → `RENDER_DEPLOY_HOOK`
 6. A partir daí: cada push na `main` que passe nos testes faz deploy automático
+
+> **Cold start:** o free tier hiberna após ~15 min de inatividade. Primeira requisição após hibernação demora ~30s. Aceitável para portfólio.
 
 ### Deploy da Interface (Streamlit Cloud)
 

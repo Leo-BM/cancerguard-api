@@ -1,30 +1,5 @@
-"""
-test_predict.py — Testes unitários da função predict() de app/model.py.
-
-Estes testes chamam predict() DIRETAMENTE, sem passar pela camada HTTP.
-O conftest.py já injeta os mocks globais (_model, _scaler, _explainer),
-então predict() executa com o comportamento controlado:
-    - _model.predict_proba → sempre retorna [[0.85, 0.15]]
-    - _scaler.transform    → retorna np.zeros((1, 30))
-    - _explainer.shap_values → retorna valores SHAP aleatórios (seed 42)
-
-Como o mock retorna prob_malignant = 0.85 fixo para QUALQUER entrada,
-os testes de predição maligna/benigna verificam a lógica de negócio
-(threshold 0.5, categorias de risco) — não o modelo em si.
-
-O modelo real é validado pelos resultados registrados no MLflow (Fase 2):
-recall=98.61%, accuracy=98.24%. Os testes aqui garantem que a lógica de
-código ao redor do modelo está correta.
-"""
-
 import pytest
 from app.model import predict, _get_risk_level
-
-# ---------------------------------------------------------------------------
-# Fixtures de dados — casos de teste representativos do dataset Wisconsin.
-# São dicionários com as 30 features no mesmo formato que a API recebe.
-# Os valores são reais do dataset (amostras índice 10 e 0 respectivamente).
-# ---------------------------------------------------------------------------
 
 BENIGN_CASE = {
     "mean_radius": 11.42,
@@ -93,15 +68,7 @@ MALIGNANT_CASE = {
 }
 
 
-# ---------------------------------------------------------------------------
-# Testes de predição
-# O mock retorna prob_malignant=0.85, portanto qualquer input → "malignant".
-# Esses testes validam que predict() interpreta corretamente o resultado do
-# modelo (threshold 0.5, montagem do dicionário de retorno).
-# ---------------------------------------------------------------------------
-
 class TestPredictOutput:
-    """Valida a estrutura e os valores do dicionário retornado por predict()."""
 
     def test_predict_returns_dict_with_all_keys(self):
         result = predict(MALIGNANT_CASE)
@@ -111,7 +78,6 @@ class TestPredictOutput:
         assert "top_features" in result
 
     def test_prediction_is_malignant_when_prob_above_threshold(self):
-        # Mock retorna 0.85 → acima do threshold 0.5 → deve ser "malignant"
         result = predict(MALIGNANT_CASE)
         assert result["prediction"] == "malignant"
 
@@ -146,14 +112,7 @@ class TestPredictOutput:
             assert isinstance(item["shap_value"], float)
 
 
-# ---------------------------------------------------------------------------
-# Testes de risk_level
-# _get_risk_level() é uma função pura (sem dependências externas) — podemos
-# testá-la diretamente sem precisar chamar predict() nem o mock do modelo.
-# ---------------------------------------------------------------------------
-
 class TestRiskLevel:
-    """Valida a lógica de categorização de risco."""
 
     def test_risk_level_high_at_0_7(self):
         assert _get_risk_level(0.7) == "high"
@@ -178,12 +137,6 @@ class TestRiskLevel:
         assert result["risk_level"] in ("high", "medium", "low")
 
     def test_recall_priority(self):
-        """
-        Garante que para um caso maligno o modelo não subestima o risco.
-        Com prob_malignant=0.85 (mock), o risco deve ser "high".
-        Esse teste captura a prioridade clínica do projeto: preferir
-        falso positivo a falso negativo.
-        """
         result = predict(MALIGNANT_CASE)
         assert result["risk_level"] == "high"
         assert result["probability_malignant"] > 0.3

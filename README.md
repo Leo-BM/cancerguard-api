@@ -178,7 +178,8 @@ Mlops_Cancer_Breast/
 │   └── logging_config.py   ← logger de predições (SQLite)
 ├── training/
 │   ├── train.py             ← treinamento + rastreamento MLflow ✅
-│   └── register_model.py   ← promoção para Production no Registry
+│   ├── register_model.py   ← promoção para Production no Registry
+│   └── export_model.py     ← exporta modelo para deploy sem MLflow
 ├── streamlit_app/
 │   └── app.py               ← interface visual
 ├── tests/

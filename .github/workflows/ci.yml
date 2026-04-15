@@ -1,10 +1,3 @@
-# ─── Fase 9: CancerGuard API — Pipeline CI/CD ────────────────────────────────
-#
-# Dois jobs em sequência:
-#   1. test   → roda em todo push e pull_request para main
-#   2. deploy → só roda após test passar E apenas em push na main
-#              (não dispara em Pull Requests)
-#
 name: CI/CD Pipeline
 
 on:
@@ -15,44 +8,24 @@ on:
 
 jobs:
 
-  # ── Job 1: Testes automatizados ─────────────────────────────────────────────
-  # Roda numa VM Ubuntu limpa — garante reprodutibilidade independente de SO local.
-  # Se qualquer teste falhar, o pipeline para aqui e o deploy não acontece.
   test:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Baixar o código do repositório para a VM
       - name: Checkout do repositório
         uses: actions/checkout@v4
 
-      # 2. Instalar Python 3.13 (mesma versão usada no desenvolvimento)
       - name: Configurar Python 3.13
         uses: actions/setup-python@v5
         with:
           python-version: "3.13"
 
-      # 3. Instalar todas as dependências do projeto
-      #    shap==0.46.0 compila extensão C++ — o ubuntu-latest tem g++ por padrão
       - name: Instalar dependências
         run: pip install -r requirements.txt
 
-      # 4. Rodar a suíte de testes completa (36 testes)
-      #    --tb=short: mostra traceback resumido em caso de falha
       - name: Executar testes
         run: pytest tests/ -v --tb=short
 
-  # ── Job 2: Deploy no Render ──────────────────────────────────────────────────
-  # Só executa se:
-  #   - O job "test" passou com sucesso (needs: test)
-  #   - O evento foi um push na branch main (não PR)
-  #
-  # O deploy é um simples HTTP POST para o Deploy Hook do Render.
-  # A URL fica guardada como secret do GitHub (nunca aparece nos logs).
-  #
-  # ⚠️  Este job só funcionará após a Fase 10 (quando o Render estiver configurado
-  #     e o secret RENDER_DEPLOY_HOOK estiver salvo no GitHub).
-  #     Enquanto isso, ele é ignorado por falta do secret — o job "test" já é suficiente.
   deploy:
     needs: test
     runs-on: ubuntu-latest
@@ -63,7 +36,7 @@ jobs:
       - name: Deploy no Render
         run: |
           if [ -z "$DEPLOY_HOOK" ]; then
-            echo "RENDER_DEPLOY_HOOK não configurado — deploy ignorado (configure na Fase 10)"
+            echo "RENDER_DEPLOY_HOOK não configurado — deploy ignorado"
             exit 0
           fi
           curl -X POST "$DEPLOY_HOOK"

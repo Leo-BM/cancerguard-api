@@ -1,13 +1,8 @@
-"""
-CancerGuard — Interface de Predição de Câncer de Mama
-Fase 7: Streamlit UI
-"""
-
 import os
 import requests
 import streamlit as st
 
-# ─── Configuração da página (deve ser o PRIMEIRO comando Streamlit) ────────────
+# deve ser o primeiro comando Streamlit
 st.set_page_config(
     page_title="CancerGuard",
     page_icon="🔬",
@@ -15,11 +10,9 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# ─── Variável de ambiente para URL da API ─────────────────────────────────────
 API_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 
 
-# ─── CSS Global ───────────────────────────────────────────────────────────────
 def inject_css() -> None:
     st.markdown(
         """
@@ -190,7 +183,6 @@ def inject_css() -> None:
     )
 
 
-# ─── Verificar saúde da API ───────────────────────────────────────────────────
 def check_api_health() -> bool:
     try:
         resp = requests.get(f"{API_URL}/health", timeout=3)
@@ -199,7 +191,6 @@ def check_api_health() -> bool:
         return False
 
 
-# ─── Header ───────────────────────────────────────────────────────────────────
 def render_header(api_online: bool) -> None:
     badge = (
         '<span class="badge-online">● API Online</span>'
@@ -220,7 +211,6 @@ def render_header(api_online: bool) -> None:
     )
 
 
-# ─── Seção informativa ────────────────────────────────────────────────────────
 def render_about_section() -> None:
     with st.expander("ℹ️  O que é este sistema e como usar?", expanded=False):
         col1, col2 = st.columns([1.2, 1], gap="large")
@@ -321,15 +311,12 @@ def render_about_section() -> None:
             )
 
 
-# ─── Formulário ───────────────────────────────────────────────────────────────
 def render_form() -> dict:
     """Renderiza as 3 abas e retorna o payload pronto para a API."""
 
     st.markdown('<p class="section-title">📋 Dados da biópsia</p>', unsafe_allow_html=True)
 
-    # ── Valores padrão: caso benigno típico do dataset Wisconsin ──────────────
     defaults = {
-        # mean  →  prefixo: mean_X  (ordem que a API espera)
         "mean_radius": 12.0,
         "mean_texture": 17.0,
         "mean_perimeter": 78.0,
@@ -340,7 +327,6 @@ def render_form() -> dict:
         "mean_concave_points": 0.030,
         "mean_symmetry": 0.180,
         "mean_fractal_dimension": 0.060,
-        # se  →  sufixo: X_se  (igual ao schemas.py)
         "radius_se": 0.30,
         "texture_se": 1.20,
         "perimeter_se": 2.00,
@@ -351,7 +337,6 @@ def render_form() -> dict:
         "concave_points_se": 0.008,
         "symmetry_se": 0.020,
         "fractal_dimension_se": 0.003,
-        # worst  →  prefixo: worst_X  (ordem que a API espera)
         "worst_radius": 14.0,
         "worst_texture": 24.0,
         "worst_perimeter": 92.0,
@@ -364,7 +349,6 @@ def render_form() -> dict:
         "worst_fractal_dimension": 0.080,
     }
 
-    # ── Labels e tooltips em português ────────────────────────────────────────
     labels = {
         "radius": "Raio",
         "texture": "Textura",
@@ -391,10 +375,6 @@ def render_form() -> dict:
     }
 
     features = list(labels.keys())
-    # Cada sufixo define tanto o prefixo/sufixo do campo quanto a aba
-    # mean  → API espera  mean_X
-    # se    → API espera  X_se
-    # worst → API espera  worst_X
     suffix_info = [
         ("mean",  "mean_{feat}",  "📊 Médias (mean)"),
         ("se",    "{feat}_se",    "📉 Erros Padrão (SE)"),
@@ -426,7 +406,6 @@ def render_form() -> dict:
     return payload
 
 
-# ─── Exibir resultado ─────────────────────────────────────────────────────────
 def render_result(response: dict) -> None:
     label = response.get("prediction", "UNKNOWN")
     prob = response.get("probability_malignant", 0.0)
@@ -439,7 +418,6 @@ def render_result(response: dict) -> None:
     label_pt = "Maligno" if is_malignant else "Benigno"
     prob_pct = f"{prob * 100:.1f}%"
 
-    # ── Badge de risco ────────────────────────────────────────────────────────
     risk_map = {
         "high":     ("badge-high",   "Alto"),
         "medium":   ("badge-medium", "Moderado"),
@@ -453,7 +431,6 @@ def render_result(response: dict) -> None:
     }
     badge_class, risk_pt = risk_map.get(risk, ("badge-low", risk))
 
-    # ── Card principal ────────────────────────────────────────────────────────
     st.markdown(
         f"""
         <div class="{card_class}">
@@ -466,11 +443,9 @@ def render_result(response: dict) -> None:
         unsafe_allow_html=True,
     )
 
-    # ── Gauge de probabilidade ────────────────────────────────────────────────
     st.markdown('<p class="section-title">📈 Probabilidade de malignidade</p>', unsafe_allow_html=True)
     st.progress(prob, text=f"{prob_pct} de probabilidade de tumor maligno")
 
-    # ── SHAP — top features ───────────────────────────────────────────────────
     if shap_values:
         st.markdown('<p class="section-title">🔍 Fatores mais relevantes (SHAP)</p>', unsafe_allow_html=True)
         st.caption(
@@ -478,7 +453,6 @@ def render_result(response: dict) -> None:
             "Valores negativos (verde) reduzem."
         )
 
-        # Ordenar pelo valor absoluto — top 10
         sorted_shap = sorted(shap_values, key=lambda x: abs(x["shap_value"]), reverse=True)[:10]
         max_abs = max(abs(x["shap_value"]) for x in sorted_shap) or 1.0
 
@@ -500,7 +474,6 @@ def render_result(response: dict) -> None:
         bars_html += "</div>"
         st.markdown(bars_html, unsafe_allow_html=True)
 
-    # ── Disclaimer ────────────────────────────────────────────────────────────
     st.markdown("---")
     st.caption(
         "⚠️ Este resultado é gerado por um modelo de Machine Learning para fins educacionais. "
@@ -508,7 +481,6 @@ def render_result(response: dict) -> None:
     )
 
 
-# ─── App principal ────────────────────────────────────────────────────────────
 def main() -> None:
     inject_css()
 
